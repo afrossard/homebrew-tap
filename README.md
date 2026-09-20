@@ -5,10 +5,10 @@ This repo carries no code of its own - each formula installs a release tarball f
 
 ## Formulae
 
-- **container-base**: the `launch-agent-runtime` launcher and `cleanup-agent-sessions` cleanup script from [afrossard/container-base](https://github.com/afrossard/container-base).
+- **agent-runtime**: the `launch-agent-runtime` launcher and `cleanup-agent-sessions` cleanup script from [afrossard/container-base](https://github.com/afrossard/container-base).
 
 ```
-brew install afrossard/tap/container-base
+brew install afrossard/tap/agent-runtime
 ```
 
 `brew upgrade` picks up new releases automatically - Renovate's `homebrew` manager bumps this tap's formula whenever the source repo tags a new version, by downloading the new release tarball and recomputing its checksum.

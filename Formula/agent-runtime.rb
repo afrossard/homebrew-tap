@@ -1,5 +1,5 @@
-class ContainerBase < Formula
-  desc "Agent runtime launcher and cleanup script for afrossard/container-base"
+class AgentRuntime < Formula
+  desc "Launcher and cleanup script for the agent runtime (afrossard/container-base)"
   homepage "https://github.com/afrossard/container-base"
   url "https://github.com/afrossard/container-base/archive/refs/tags/2.1.2.tar.gz"
   sha256 "d2e659d64fb38de2f1b363d45faf269bfb3309d1e779623cd67e1fbd67e28cc0"
