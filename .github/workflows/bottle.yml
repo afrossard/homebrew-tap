@@ -1,0 +1,108 @@
+name: Bottle formula
+
+# Renovate already opens same-repo (non-fork) branches/PRs against Formula/*.rb
+# to bump a formula's source url/sha256. This workflow reacts to that PR with a
+# token that already has write access to its branch (no pull_request_target
+# needed), builds a platform-independent bottle, publishes it as a GitHub
+# Release asset in this repo, and commits the updated bottle block back onto
+# the same branch - so one PR carries both the version bump and its bottle.
+#
+# workflow_dispatch runs the same build unconditionally, for manual bottle
+# rebuilds or to exercise the mechanism outside of a Renovate PR.
+on:
+  pull_request:
+    paths:
+      - "Formula/**"
+  workflow_dispatch:
+    inputs:
+      formula:
+        description: Formula name to bottle (without .rb), e.g. agent-runtime
+        required: true
+        default: agent-runtime
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bottle-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bottle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine branch to build and push onto
+        id: branch
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "name=${{ github.event.pull_request.head.ref }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.branch.outputs.name }}
+          fetch-depth: 0
+
+      - name: Determine which formulas need a bottle rebuild
+        id: formulas
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            formulas="Formula/${{ inputs.formula }}.rb"
+          else
+            git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=1
+            formulas="$(.github/scripts/formulas-needing-bottle.sh "origin/${{ github.event.pull_request.base.ref }}" | tr '\n' ' ')"
+          fi
+          echo "list=${formulas}" >> "$GITHUB_OUTPUT"
+          if [ -z "${formulas// /}" ]; then
+            echo "No formula source (url/sha256) changes detected - skipping bottle build."
+          fi
+
+      - name: Install Homebrew
+        if: steps.formulas.outputs.list != ''
+        id: homebrew
+        uses: Homebrew/actions/setup-homebrew@1e34f2e2acaa766b7efacb8c26352e6abbb023f9 # 2026.09.13.1
+
+      - name: Reset checkout to the real branch tip
+        if: steps.formulas.outputs.list != ''
+        # setup-homebrew's own internal fetch/checkout (to trust this tap)
+        # moves HEAD to $GITHUB_SHA, which for a pull_request event is a
+        # synthetic merge-with-base commit, not the branch tip - committing
+        # on top of that would splice a phantom merge commit into the PR
+        # branch's real history. Force back to the actual branch tip first.
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ steps.branch.outputs.name }}"
+          git checkout -B "${{ steps.branch.outputs.name }}" "origin/${{ steps.branch.outputs.name }}"
+
+      - name: Build and publish bottle(s)
+        if: steps.formulas.outputs.list != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TAP_NAME: ${{ steps.homebrew.outputs.tap-name }}
+        run: |
+          set -euo pipefail
+          for f in ${{ steps.formulas.outputs.list }}; do
+            .github/scripts/build-and-publish-bottle.sh "$f"
+          done
+
+      - name: Commit updated formula(s) back onto the PR branch
+        if: steps.formulas.outputs.list != ''
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # setup-homebrew's own fetch/checkout inside the tap (this same
+          # checkout) drops the credential actions/checkout wired up, so
+          # re-authenticate origin before pushing.
+          git remote set-url origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          git add ${{ steps.formulas.outputs.list }}
+          if git diff --cached --quiet; then
+            echo "Bottle unchanged - nothing to commit."
+          else
+            git commit -m "chore: rebuild bottle for ${{ steps.formulas.outputs.list }}"
+            git push origin "HEAD:${{ steps.branch.outputs.name }}"
+          fi
