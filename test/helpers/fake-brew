@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Stands in for `brew info --json=v2 <tap>/<name>` so the tests can run
+# without a Homebrew install and a real tap. Reports the same two fields the
+# real thing does for the formula in the current checkout: the stable version
+# brew parses out of the source url, and the bottle block's root_url.
+set -euo pipefail
+
+name="${!#}"
+name="${name##*/}"
+file="Formula/${name}.rb"
+
+version="$(sed -n 's|.*/tags/\(.*\)\.tar\.gz".*|\1|p' "$file" | head -1)"
+root_url="$(sed -n 's|.*root_url "\(.*\)".*|\1|p' "$file" | head -1)"
+
+if [ -n "$root_url" ]; then
+  bottle="{\"stable\":{\"root_url\":\"${root_url}\"}}"
+else
+  bottle="{}"
+fi
+
+printf '{"formulae":[{"versions":{"stable":"%s"},"bottle":%s}]}\n' "$version" "$bottle"

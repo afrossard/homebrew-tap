@@ -45,8 +45,29 @@ jobs:
           ref: ${{ steps.branch.outputs.name }}
           fetch-depth: 0
 
+      - name: Install Homebrew
+        id: homebrew
+        # Homebrew is a rolling release with no stable-release concept, and
+        # Renovate cannot reliably pin/bump this action's CalVer tags (see
+        # PR history on this file) - float on main instead of chasing pins.
+        uses: Homebrew/actions/setup-homebrew@main
+
+      - name: Reset checkout to the real branch tip
+        # setup-homebrew's own internal fetch/checkout (to trust this tap)
+        # moves HEAD to $GITHUB_SHA, which for a pull_request event is a
+        # synthetic merge-with-base commit, not the branch tip - committing
+        # on top of that would splice a phantom merge commit into the PR
+        # branch's real history. Force back to the actual branch tip first,
+        # which is also the formula the step below must judge.
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ steps.branch.outputs.name }}"
+          git checkout -B "${{ steps.branch.outputs.name }}" "origin/${{ steps.branch.outputs.name }}"
+
       - name: Determine which formulas need a bottle rebuild
         id: formulas
+        env:
+          TAP_NAME: ${{ steps.homebrew.outputs.tap-name }}
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -57,28 +78,8 @@ jobs:
           fi
           echo "list=${formulas}" >> "$GITHUB_OUTPUT"
           if [ -z "${formulas// /}" ]; then
-            echo "No formula source (url/sha256) changes detected - skipping bottle build."
+            echo "Every touched formula already has a bottle for its current version - skipping bottle build."
           fi
-
-      - name: Install Homebrew
-        if: steps.formulas.outputs.list != ''
-        id: homebrew
-        # Homebrew is a rolling release with no stable-release concept, and
-        # Renovate cannot reliably pin/bump this action's CalVer tags (see
-        # PR history on this file) - float on main instead of chasing pins.
-        uses: Homebrew/actions/setup-homebrew@main
-
-      - name: Reset checkout to the real branch tip
-        if: steps.formulas.outputs.list != ''
-        # setup-homebrew's own internal fetch/checkout (to trust this tap)
-        # moves HEAD to $GITHUB_SHA, which for a pull_request event is a
-        # synthetic merge-with-base commit, not the branch tip - committing
-        # on top of that would splice a phantom merge commit into the PR
-        # branch's real history. Force back to the actual branch tip first.
-        run: |
-          set -euo pipefail
-          git fetch origin "${{ steps.branch.outputs.name }}"
-          git checkout -B "${{ steps.branch.outputs.name }}" "origin/${{ steps.branch.outputs.name }}"
 
       - name: Build and publish bottle(s)
         if: steps.formulas.outputs.list != ''
