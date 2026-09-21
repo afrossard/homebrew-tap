@@ -5,6 +5,12 @@ class AgentRuntime < Formula
   sha256 "d2e659d64fb38de2f1b363d45faf269bfb3309d1e779623cd67e1fbd67e28cc0"
   license "Unlicense"
 
+  bottle do
+    root_url "https://github.com/afrossard/homebrew-tap/releases/download/agent-runtime-2.1.2"
+    rebuild 1
+    sha256 cellar: :any_skip_relocation, all: "915da35fddae923c3774371f10e4c32ded1e0fffe458a0f7aebad1148c28c926"
+  end
+
   def install
     libexec.install "scripts/launch-agent-runtime"
     libexec.install "scripts/cleanup-agent-sessions"
