@@ -63,7 +63,10 @@ jobs:
       - name: Install Homebrew
         if: steps.formulas.outputs.list != ''
         id: homebrew
-        uses: Homebrew/actions/setup-homebrew@1e34f2e2acaa766b7efacb8c26352e6abbb023f9 # 2026.09.13.1
+        # Homebrew is a rolling release with no stable-release concept, and
+        # Renovate cannot reliably pin/bump this action's CalVer tags (see
+        # PR history on this file) - float on main instead of chasing pins.
+        uses: Homebrew/actions/setup-homebrew@main
 
       - name: Reset checkout to the real branch tip
         if: steps.formulas.outputs.list != ''

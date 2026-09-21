@@ -1,12 +1,4 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
-  "packageRules": [
-    {
-      "description": "Homebrew/actions tags are CalVer with a 4th daily-increment segment (e.g. 2026.09.13.1). The github-actions manager's own version-comment parser caps captured versions at 3 numeric segments regardless of the configured versioning scheme, so it always truncates this to 2026.09.13, a ref that doesn't exist - both when reading the current pin and when re-verifying a write-back. Overriding versioning (e.g. to \"loose\") only fixes comparison, so Renovate believes an update is available, tries to write it, and then fails its own re-parse - turning the prior soft dashboard warning into an actively erroring branch/PR. Since this is a manager limitation and not something a config option can fix, disable Renovate management of this dependency entirely; bump its pinned SHA/tag comment in .github/workflows/bottle.yml by hand.",
-      "matchManagers": ["github-actions"],
-      "matchDepNames": ["Homebrew/actions"],
-      "enabled": false
-    }
-  ]
+  "extends": ["config:recommended"]
 }
