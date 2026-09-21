@@ -1,4 +1,12 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"]
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "description": "Homebrew/actions tags are CalVer with a 4th daily-increment segment (e.g. 2026.09.13.1). Renovate's default github-actions versioning parses/coerces via strict semver, which only keeps the first 3 numeric segments - it silently truncates this to 2026.09.13, a ref that doesn't exist, so digest lookups fail (surfaced on the Dependency Dashboard as 'Could not determine new digest for update'). Loose versioning compares all numeric segments as-is with no truncation.",
+      "matchManagers": ["github-actions"],
+      "matchDepNames": ["Homebrew/actions"],
+      "versioning": "loose"
+    }
+  ]
 }
