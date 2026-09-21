@@ -8,6 +8,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 See `.github/workflows/bottle.yml`, `.github/scripts/*.sh`, and the README's "Bottle" section for what it is and how the rebuild automation works.
 
 - `brew bottle --merge --write` only auto-produces an `all:` tag when merging multiple per-platform JSON files with matching checksums (a multi-runner matrix). For a single-build `all:` bottle, build once, then relabel that one tag to `all` in the `--json` output (and its tarball filename) before merging.
+- Every keg brew builds records the tap's own git HEAD (`INSTALL_RECEIPT.json` `tap_git_head`), so no two builds from different tap commits ever produce the same bottle sha256. A rebuild therefore cannot converge on the bottle already committed, and no "did anything change?" guard after the build can stop a rebuild loop. Whether to rebuild has to be decided up front from the formula's current state (`.github/scripts/formulas-needing-bottle.sh`), never from what a commit or a branch changed - see `test/formulas-needing-bottle.bats`.
 
 ## CI checkout sharp edges
 

@@ -31,8 +31,12 @@ Renovate's version bump alone leaves the formula without a matching bottle, sinc
 The [`Bottle formula`](.github/workflows/bottle.yml) workflow closes that gap automatically:
 
 1. Renovate opens its usual same-repo PR bumping `Formula/agent-runtime.rb`'s `url`/`sha256` to a new container-base release.
-2. That PR triggers the workflow, which detects the source change, builds a fresh `all:` bottle with Homebrew's own `brew bottle` tooling, and publishes the tarball to a GitHub Release in this repo.
+2. That PR triggers the workflow, which sees the formula has no bottle for its new version, builds a fresh `all:` bottle with Homebrew's own `brew bottle` tooling, and publishes the tarball to a GitHub Release in this repo.
 3. The workflow commits the updated bottle block back onto the same PR branch, so the single Renovate PR carries both the version bump and its matching bottle.
 4. Merging that one PR is the only manual step. No separate bottle PR and no cross-repo credential is needed, since the PR branch already lives in this repo.
 
-The workflow only rebuilds when a formula's source actually changed (not on every PR that happens to touch `Formula/`), and can also be run by hand via `workflow_dispatch` to rebuild a formula's bottle on demand.
+The workflow rebuilds a formula only when the bottle committed next to it is stale, meaning its `bottle do` block's `root_url` no longer points at the release tag for the formula's current version.
+That is deliberately a question about the state the formula is in, not about what a commit or a branch changed: step 3 pushes onto the branch the workflow is running on, so the workflow always runs again on its own bottle commit and has to recognise its own work.
+Nothing downstream can catch a wrong answer there.
+Brew stamps the tap's own git HEAD into every keg it builds, so the rebuild that follows a bottle commit bakes in that commit and yields a different tarball every time; it can never settle by reproducing the bottle already committed.
+`workflow_dispatch` rebuilds a formula's bottle on demand, which is also how to force one when a source changed without the version changing.
