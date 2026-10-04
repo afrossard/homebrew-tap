@@ -5,6 +5,11 @@ class ActualBudgetTransformer < Formula
   sha256 "0a54237d2df94def1ff11daea64f0afd207beef3a422f2c5b8cdc17d43b6dc2a"
   license "Unlicense"
 
+  bottle do
+    root_url "https://github.com/afrossard/homebrew-tap/releases/download/actual-budget-transformer-0.1.0"
+    sha256 cellar: :any_skip_relocation, all: "705cc0d6581ff371421b65b3411c9da86c98df09a5322c91325775c00586044b"
+  end
+
   def install
     bin.install "scripts/abt-import"
   end
