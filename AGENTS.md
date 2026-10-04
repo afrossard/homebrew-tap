@@ -4,7 +4,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 ## Bottle
 
-`agent-runtime` ships a bottle so `brew install` needs no compiler on the host.
+Every formula ships a bottle so `brew install` needs no compiler on the host.
 See `.github/workflows/bottle.yml`, `.github/scripts/*.sh`, and the README's "Bottle" section for what it is and how the rebuild automation works.
 
 - `brew bottle --merge --write` only auto-produces an `all:` tag when merging multiple per-platform JSON files with matching checksums (a multi-runner matrix). For a single-build `all:` bottle, build once, then relabel that one tag to `all` in the `--json` output (and its tarball filename) before merging.
