@@ -1,8 +1,8 @@
 class AgentRuntime < Formula
   desc "Launcher and cleanup script for the agent runtime (afrossard/container-base)"
   homepage "https://github.com/afrossard/container-base"
-  url "https://github.com/afrossard/container-base/archive/refs/tags/4.0.1.tar.gz"
-  sha256 "7d7a6d9a5b4140793a4007d6acd4ddbfda11925440277d5184e8c91b0cc433b7"
+  url "https://github.com/afrossard/container-base/archive/refs/tags/4.0.4.tar.gz"
+  sha256 "f93cf1a69b97b7a7d2ae941d2a721653e3368655bef3746ed1161a733cf1e8b2"
   license "Unlicense"
 
   bottle do
