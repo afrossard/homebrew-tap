@@ -1,8 +1,8 @@
 class ActualBudgetTransformer < Formula
   desc "Launcher for the bank statement import CLI (afrossard/actual-budget-transformer)"
   homepage "https://github.com/afrossard/actual-budget-transformer"
-  url "https://github.com/afrossard/actual-budget-transformer/archive/refs/tags/0.1.0.tar.gz"
-  sha256 "0a54237d2df94def1ff11daea64f0afd207beef3a422f2c5b8cdc17d43b6dc2a"
+  url "https://github.com/afrossard/actual-budget-transformer/archive/refs/tags/0.2.2.tar.gz"
+  sha256 "dccb7c102717361fc22faa7c5b9c5a3266554fc32731f1d551a2ea9b01a25664"
   license "Unlicense"
 
   bottle do
