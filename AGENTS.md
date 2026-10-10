@@ -9,6 +9,7 @@ See `.github/workflows/bottle.yml`, `.github/scripts/*.sh`, and the README's "Bo
 
 - `brew bottle --merge --write` only auto-produces an `all:` tag when merging multiple per-platform JSON files with matching checksums (a multi-runner matrix). For a single-build `all:` bottle, build once, then relabel that one tag to `all` in the `--json` output (and its tarball filename) before merging.
 - Every keg brew builds records the tap's own git HEAD (`INSTALL_RECEIPT.json` `tap_git_head`), so no two builds from different tap commits ever produce the same bottle sha256. A rebuild therefore cannot converge on the bottle already committed, and no "did anything change?" guard after the build can stop a rebuild loop. Whether to rebuild has to be decided up front from the formula's current state (`.github/scripts/formulas-needing-bottle.sh`), never from what a commit or a branch changed - see `test/formulas-needing-bottle.bats`.
+- The workflow pushes its bottle commit with `GITHUB_TOKEN`, and such pushes never trigger workflows, so that commit gets no checks. Making the Bottle job a required status check would therefore block every PR; the push-to-`main` trigger is the safety net instead.
 
 ## CI checkout sharp edges
 

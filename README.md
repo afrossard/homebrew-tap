@@ -42,8 +42,11 @@ The [`Bottle formula`](.github/workflows/bottle.yml) workflow closes that gap au
 3. The workflow commits the updated bottle block back onto the same PR branch, so the single Renovate PR carries both the version bump and its matching bottle.
 4. Merging that one PR is the only manual step. No separate bottle PR and no cross-repo credential is needed, since the PR branch already lives in this repo.
 
+If a PR is merged before its bottle commit lands, for example right after Renovate force-pushed the branch and dropped an earlier bottle commit, the same workflow runs on the push to `main` and commits the missing bottle there.
+
 The workflow rebuilds a formula only when the bottle committed next to it is stale, meaning its `bottle do` block's `root_url` no longer points at the release tag for the formula's current version.
-That is deliberately a question about the state the formula is in, not about what a commit or a branch changed: step 3 pushes onto the branch the workflow is running on, so the workflow always runs again on its own bottle commit and has to recognise its own work.
+It checks every formula in the tree, deliberately asking what state each one is in rather than what a commit or a branch changed.
+A diff against a base branch gives wrong answers once history moves under it, through force-pushes, a base that has advanced, or a merge that happens mid-run, while a state check reads the same however the tree was reached.
 Nothing downstream can catch a wrong answer there.
-Brew stamps the tap's own git HEAD into every keg it builds, so the rebuild that follows a bottle commit bakes in that commit and yields a different tarball every time; it can never settle by reproducing the bottle already committed.
+Brew stamps the tap's own git HEAD into every keg it builds, so any rebuild from a later commit yields a different tarball every time; it can never settle by reproducing the bottle already committed.
 `workflow_dispatch` rebuilds a formula's bottle on demand, which is also how to force one when a source changed without the version changing.

@@ -1,13 +1,15 @@
 #!/usr/bin/env bats
 #
-# The bottle workflow commits the bottle it built back onto the PR branch,
-# which re-triggers the workflow on the workflow's own commit. What this
-# script prints is the only thing that stops that second run from building
-# and pushing again, and again: brew stamps the tap's git HEAD into every keg
-# it builds, so a rebuild after a bottle commit always yields a different
-# sha256 and the "nothing to commit" guard downstream can never catch it.
-# PR #8 pushed two bottle commits before an unrelated CI failure broke the
-# loop by accident.
+# What this script prints is the only thing that stops a bottle workflow run
+# on a branch that already carries its bottle from building and pushing
+# another one: brew stamps the tap's git HEAD into every keg it builds, so a
+# rebuild from a later commit always yields a different sha256 and the
+# "nothing to commit" guard downstream can never catch it. PR #8 pushed two
+# bottle commits before an unrelated CI failure broke the loop by accident.
+#
+# It must also answer from the tree alone. PRs #12 and #13 merged stale
+# bottles to main because a diff against a moving, shallow-fetched base failed
+# silently and reported nothing to rebuild.
 
 setup() {
   SCRIPT="${BATS_TEST_DIRNAME}/../.github/scripts/formulas-needing-bottle.sh"
@@ -16,9 +18,6 @@ setup() {
 
   cd "$BATS_TEST_TMPDIR"
   mkdir -p Formula
-  git init -q .
-  git config user.email "test@example.invalid"
-  git config user.name "test"
 }
 
 # write_formula <name> <version> [bottle-version]
@@ -39,90 +38,58 @@ write_formula() {
   } >"Formula/${name}.rb"
 }
 
-commit() {
-  git add -A
-  git commit -qm "$1"
-}
-
-# Commits a base branch carrying agent-runtime 2.1.2 with a matching bottle.
-given_base() {
-  write_formula agent-runtime 2.1.2 2.1.2
-  commit "base"
-  git branch base
-}
-
 @test "rebuilds when a version bump leaves the committed bottle behind" {
-  given_base
   write_formula agent-runtime 4.0.0 2.1.2
-  commit "renovate bumps the formula"
 
-  run "$SCRIPT" base
+  run "$SCRIPT"
   [ "$status" -eq 0 ]
   [ "$output" = "Formula/agent-runtime.rb" ]
 }
 
-@test "does not rebuild the bottle the workflow just committed" {
-  given_base
-  write_formula agent-runtime 4.0.0 2.1.2
-  commit "renovate bumps the formula"
+@test "does not rebuild a bottle that matches the formula's version" {
   write_formula agent-runtime 4.0.0 4.0.0
-  commit "chore: rebuild bottle for Formula/agent-runtime.rb"
 
-  run "$SCRIPT" base
-  [ "$status" -eq 0 ]
-  [ "$output" = "" ]
-}
-
-@test "does not rebuild when bump and bottle arrive as one squashed commit" {
-  given_base
-  write_formula agent-runtime 4.0.0 4.0.0
-  commit "bump and bottle, squashed"
-
-  run "$SCRIPT" base
+  run "$SCRIPT"
   [ "$status" -eq 0 ]
   [ "$output" = "" ]
 }
 
 @test "rebuilds a formula that carries no bottle yet" {
-  given_base
   write_formula agent-runtime 4.0.0
-  commit "drop the bottle block"
 
-  run "$SCRIPT" base
+  run "$SCRIPT"
   [ "$status" -eq 0 ]
   [ "$output" = "Formula/agent-runtime.rb" ]
 }
 
-@test "ignores a stale formula the branch does not touch" {
-  write_formula agent-runtime 2.1.2 2.1.2
-  write_formula other-tool 3.0.0 1.0.0
-  commit "base"
-  git branch base
+@test "lists only the stale formulas among several" {
+  write_formula agent-runtime 4.0.4 4.0.1
+  write_formula other-tool 3.0.0 3.0.0
+  write_formula third-tool 0.2.2 0.1.0
 
-  write_formula agent-runtime 4.0.0 4.0.0
-  commit "touch only agent-runtime"
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "${lines[*]}" = "Formula/agent-runtime.rb Formula/third-tool.rb" ]
+}
 
-  run "$SCRIPT" base
+@test "does not mistake a version prefix for a match" {
+  write_formula agent-runtime 4.0.10 4.0.1
+
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$output" = "Formula/agent-runtime.rb" ]
+}
+
+@test "prints nothing when there are no formulas" {
+  run "$SCRIPT"
   [ "$status" -eq 0 ]
   [ "$output" = "" ]
 }
 
-@test "ignores a formula the branch deletes" {
-  given_base
-  git rm -q Formula/agent-runtime.rb
-  commit "drop the formula"
+@test "fails instead of reporting nothing when brew fails" {
+  write_formula agent-runtime 4.0.0 2.1.2
+  export BREW=false
 
-  run "$SCRIPT" base
-  [ "$status" -eq 0 ]
-  [ "$output" = "" ]
-}
-
-@test "prints nothing when the branch changes no formula" {
-  given_base
-  echo "notes" >README.md
-  commit "unrelated change"
-
-  run "$SCRIPT" base
-  [ "$status" -eq 0 ]
-  [ "$output" = "" ]
+  run "$SCRIPT"
+  [ "$status" -ne 0 ]
 }

@@ -7,10 +7,22 @@ name: Bottle formula
 # Release asset in this repo, and commits the updated bottle block back onto
 # the same branch - so one PR carries both the version bump and its bottle.
 #
+# push to main is the safety net for a PR merged before its bottle landed
+# (e.g. merged right after Renovate force-pushed away the bottle commit): the
+# same state check finds the stale bottle and commits the fix onto main.
+#
 # workflow_dispatch runs the same build unconditionally, for manual bottle
 # rebuilds or to exercise the mechanism outside of a Renovate PR.
+#
+# Pushes this workflow makes with GITHUB_TOKEN never trigger another workflow
+# run, so a bottle commit gets no CI of its own.
 on:
   pull_request:
+    paths:
+      - "Formula/**"
+  push:
+    branches:
+      - main
     paths:
       - "Formula/**"
   workflow_dispatch:
@@ -73,12 +85,12 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             formulas="Formula/${{ inputs.formula }}.rb"
           else
-            git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=1
-            formulas="$(.github/scripts/formulas-needing-bottle.sh "origin/${{ github.event.pull_request.base.ref }}" | tr '\n' ' ')"
+            stale="$(.github/scripts/formulas-needing-bottle.sh)"
+            formulas="$(tr '\n' ' ' <<<"$stale")"
           fi
           echo "list=${formulas}" >> "$GITHUB_OUTPUT"
           if [ -z "${formulas// /}" ]; then
-            echo "Every touched formula already has a bottle for its current version - skipping bottle build."
+            echo "Every formula already has a bottle for its current version - skipping bottle build."
           fi
 
       - name: Build and publish bottle(s)
@@ -93,7 +105,7 @@ jobs:
             .github/scripts/build-and-publish-bottle.sh "$f"
           done
 
-      - name: Commit updated formula(s) back onto the PR branch
+      - name: Commit updated formula(s) back onto the branch
         if: steps.formulas.outputs.list != ''
         run: |
           set -euo pipefail
