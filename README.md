@@ -40,7 +40,8 @@ The [`Bottle formula`](.github/workflows/bottle.yml) workflow closes that gap au
 1. Renovate opens its usual same-repo PR bumping a formula's `url`/`sha256` to a new release of its source repo.
 2. That PR triggers the workflow, which sees the formula has no bottle for its new version, builds a fresh `all:` bottle with Homebrew's own `brew bottle` tooling, and publishes the tarball to a GitHub Release in this repo.
 3. The workflow commits the updated bottle block back onto the same PR branch, so the single Renovate PR carries both the version bump and its matching bottle.
-4. Merging that one PR is the only manual step. No separate bottle PR and no cross-repo credential is needed, since the PR branch already lives in this repo.
+4. Renovate merges the PR itself once every check on its head, the bottle commit included, has passed ([`renovate.json`](renovate.json)). No separate bottle PR and no cross-repo credential is needed, since the PR branch already lives in this repo.
+   Renovate ignores the bottle commit when deciding whether someone else has edited its branch, so the commit doesn't stop it from rebasing or merging.
 
 The bottle commit is pushed as a GitHub App, so it runs the same checks as Renovate's commit without waiting for anyone to approve them.
 That push re-triggers the workflow, which finds the bottle current and builds nothing.
