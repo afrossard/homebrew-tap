@@ -6,9 +6,8 @@ class AgentRuntime < Formula
   license "Unlicense"
 
   bottle do
-    root_url "https://github.com/afrossard/homebrew-tap/releases/download/agent-runtime-4.0.4"
-    rebuild 1
-    sha256 cellar: :any_skip_relocation, all: "a30bc6d511ee8e3a28cfb8f001654bdfc2c67055af52b248266fb9d9272d209b"
+    root_url "https://github.com/afrossard/homebrew-tap/releases/download/agent-runtime-5.0.0"
+    sha256 cellar: :any_skip_relocation, all: "c90a26c2462fedb5b595b986d18bba20dc151b708b2e017c7f130d75626f3c64"
   end
 
   def install
