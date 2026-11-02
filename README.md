@@ -42,6 +42,9 @@ The [`Bottle formula`](.github/workflows/bottle.yml) workflow closes that gap au
 3. The workflow commits the updated bottle block back onto the same PR branch, so the single Renovate PR carries both the version bump and its matching bottle.
 4. Merging that one PR is the only manual step. No separate bottle PR and no cross-repo credential is needed, since the PR branch already lives in this repo.
 
+The bottle commit is pushed as a GitHub App, so it runs the same checks as Renovate's commit without waiting for anyone to approve them.
+That push re-triggers the workflow, which finds the bottle current and builds nothing.
+
 If a PR is merged before its bottle commit lands, for example right after Renovate force-pushed the branch and dropped an earlier bottle commit, the same workflow runs on the push to `main` and commits the missing bottle there.
 
 The workflow rebuilds a formula only when the bottle committed next to it is stale, meaning its `bottle do` block's `root_url` no longer points at the release tag for the formula's current version.

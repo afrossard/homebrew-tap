@@ -14,8 +14,14 @@ name: Bottle formula
 # workflow_dispatch runs the same build unconditionally, for manual bottle
 # rebuilds or to exercise the mechanism outside of a Renovate PR.
 #
-# Pushes this workflow makes with GITHUB_TOKEN never trigger another workflow
-# run, so a bottle commit gets no CI of its own.
+# The bottle commit is pushed with a GitHub App installation token, not
+# GITHUB_TOKEN. GitHub holds runs for GITHUB_TOKEN pushes onto a PR branch for
+# manual approval, and closes any still held at merge as zero-job failures. An
+# App token's push triggers ordinary CI, including this workflow, which then
+# finds nothing stale and builds nothing - the state check makes it loop-safe.
+# Setup: an App with Contents read/write installed on this repo, its client ID
+# in vars.BOTTLE_APP_CLIENT_ID, its slug in vars.BOTTLE_APP_SLUG, and its
+# private key in secrets.BOTTLE_APP_PRIVATE_KEY.
 on:
   pull_request:
     paths:
@@ -37,12 +43,22 @@ permissions:
 
 concurrency:
   group: bottle-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # A run triggered by this workflow's own bottle push must queue behind the
+  # run that pushed it rather than cancel it while it is still finishing.
+  cancel-in-progress: ${{ github.actor != format('{0}[bot]', vars.BOTTLE_APP_SLUG) }}
 
 jobs:
   bottle:
     runs-on: ubuntu-latest
     steps:
+      - name: Mint a GitHub App token to push the bottle commit with
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.BOTTLE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BOTTLE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Determine branch to build and push onto
         id: branch
         run: |
@@ -109,12 +125,15 @@ jobs:
         if: steps.formulas.outputs.list != ''
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          bot="${{ steps.app-token.outputs.app-slug }}[bot]"
+          bot_id="$(GH_TOKEN="${{ steps.app-token.outputs.token }}" gh api "/users/${bot}" --jq .id)"
+          git config user.name "${bot}"
+          git config user.email "${bot_id}+${bot}@users.noreply.github.com"
           # setup-homebrew's own fetch/checkout inside the tap (this same
           # checkout) drops the credential actions/checkout wired up, so
-          # re-authenticate origin before pushing.
-          git remote set-url origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          # re-authenticate origin before pushing. Push as the App, not with
+          # GITHUB_TOKEN, so the bottle commit gets CI without an approval hold.
+          git remote set-url origin "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository }}.git"
           git add ${{ steps.formulas.outputs.list }}
           if git diff --cached --quiet; then
             echo "Bottle unchanged - nothing to commit."
