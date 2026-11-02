@@ -7,7 +7,7 @@ class ActualBudgetTransformer < Formula
 
   bottle do
     root_url "https://github.com/afrossard/homebrew-tap/releases/download/actual-budget-transformer-0.4.0"
-    sha256 cellar: :any_skip_relocation, all: "b666de45cb38942f3bfeb4163433392d93bca9e3eb25e0f3e85b2e1cb8497f57"
+    sha256 cellar: :any_skip_relocation, all: "404bfb4af82f697e9cd7039e9725598059077be17c4edfe4379b5626f9c8da17"
   end
 
   def install
