@@ -6,8 +6,8 @@ class ActualBudgetTransformer < Formula
   license "Unlicense"
 
   bottle do
-    root_url "https://github.com/afrossard/homebrew-tap/releases/download/actual-budget-transformer-0.3.0"
-    sha256 cellar: :any_skip_relocation, all: "844e1e359cab305d0ed44a27e7c28f19fe6da687207576ba7026c2e7ddb10f0a"
+    root_url "https://github.com/afrossard/homebrew-tap/releases/download/actual-budget-transformer-0.4.0"
+    sha256 cellar: :any_skip_relocation, all: "b666de45cb38942f3bfeb4163433392d93bca9e3eb25e0f3e85b2e1cb8497f57"
   end
 
   def install
