@@ -24,6 +24,9 @@ We deliberately keep zero required approvals and keep Renovate automerge for the
 - **Scanners:** zizmor at `min-severity: high` on all three repos, and a `tap-syntax` job running `brew test-bot --only-tap-syntax` on the tap.
   zizmor's 4 high findings in `bottle.yml` must be fixed before `zizmor` becomes required.
 - **Pin `Homebrew/actions/setup-homebrew` to a hash** and keep it current with the Renovate config below.
+- **Enable `sha_pinning_required` on all three repos, after that pin lands.**
+  GitHub then enforces the hash-pinning rule at job setup, and pinned `setup-homebrew` still runs under it.
+  That pin is the only unpinned action reference across the three repos, but actions nested inside third-party composite actions were not tested.
 
 The custom manager is needed because Renovate's `github-actions` manager truncates the action's four-part tags, so `2026.10.26.1` reads as `2026.10.26` and no update is proposed.
 
@@ -45,20 +48,14 @@ The custom manager is needed because Renovate's `github-actions` manager truncat
 }
 ```
 
-## Open proposals
-
-These came out of testing, and the owner has not decided them.
-
-- **Enable `sha_pinning_required` on all three repos, after the pin above lands.**
-  It makes GitHub enforce the hash-pinning rule at job setup, and pinned `setup-homebrew` still runs under it.
-- **Turn off "Actions can approve PRs" on `container-base` and `actual-budget-transformer`.**
-  It is already off on the tap, and nothing recorded here depends on it, although its effect was not tested.
-- **Do not add `brew audit --strict`.**
-  `tap-syntax` runs `brew audit` without `--strict`, and it already fails on a formula with no `sha256`.
-  Strict mode passes on both formulas today but was not shown to catch anything further.
-
 ## Considered options
 
+- **Turning off "Allow GitHub Actions to create and approve pull requests" on `container-base` and `actual-budget-transformer`:** rejected, because release-please opens the release PRs there with `GITHUB_TOKEN`.
+  GitHub documents that this setting also blocks PR creation, although that was not tested here.
+  With 0 required approvals, an approval from Actions grants nothing, so turning it off would cost releases and gain no protection.
+- **`brew audit --strict`:** rejected, because it adds a way to block merges without a demonstrated benefit.
+  `tap-syntax` runs `brew audit` without `--strict`, and it already fails on a formula with no `sha256`.
+  Strict mode passes on both formulas today but was not shown to catch anything further, and a new strict rule from Homebrew could block automerged formula bumps.
 - **One or more required approvals:** rejected, because the sole maintainer could then never merge.
   GitHub refuses to let an author approve their own PR, and `gh pr merge --admin` is rejected as well.
 - **GitHub App as a bypass actor:** rejected, because a stolen App key could write to `main`.
