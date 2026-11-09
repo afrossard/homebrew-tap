@@ -7,14 +7,14 @@ This repo carries no code of its own; each formula installs a release tarball fr
 
 - **agent-runtime**: the `launch-agent-runtime` launcher and `cleanup-agent-sessions` cleanup script from [afrossard/container-base](https://github.com/afrossard/container-base).
 
-```
+```sh
 brew install afrossard/tap/agent-runtime
 ```
 
 - **actual-budget-transformer**: the `abt-import` launcher from [afrossard/actual-budget-transformer](https://github.com/afrossard/actual-budget-transformer), which runs that release's import CLI image under [msb](https://github.com/superradcompany/microsandbox).
   msb is not a dependency, because it may already be installed by its own `curl` installer; the formula's caveats say how to get it.
 
-```
+```sh
 brew install afrossard/tap/actual-budget-transformer
 ```
 
