@@ -8,9 +8,8 @@
 # history moves under it: Renovate force-pushes its branches (dropping the
 # bottle commit this workflow added), the base branch advances, and a PR can
 # be merged before the run for its last commit finishes. A state check gives
-# the same answer however the tree was reached, so the same check serves both
-# PR branches and main, and a stale bottle that lands on main gets repaired by
-# the next run there.
+# the same answer however the tree was reached, so the same check decides what
+# the bottle workflow builds and fails the required stale-bottle check.
 #
 # Nothing downstream can catch a wrong answer here. Brew stamps the tap's own
 # git HEAD into every keg it builds (INSTALL_RECEIPT.json "tap_git_head"), so

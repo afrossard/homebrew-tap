@@ -7,12 +7,13 @@ name: Bottle formula
 # Release asset in this repo, and commits the updated bottle block back onto
 # the same branch - so one PR carries both the version bump and its bottle.
 #
-# push to main is the safety net for a PR merged before its bottle landed
-# (e.g. merged right after Renovate force-pushed away the bottle commit): the
-# same state check finds the stale bottle and commits the fix onto main.
+# This workflow never commits to main, which only accepts pull requests. The
+# required stale-bottle check in test.yml stops a PR merging before its bottle
+# lands (e.g. right after Renovate force-pushed away the bottle commit).
 #
 # workflow_dispatch runs the same build unconditionally, for manual bottle
-# rebuilds or to exercise the mechanism outside of a Renovate PR.
+# rebuilds or to exercise the mechanism outside of a Renovate PR. It must
+# target a PR branch.
 #
 # The bottle commit is pushed with a GitHub App installation token, not
 # GITHUB_TOKEN. GitHub holds runs for GITHUB_TOKEN pushes onto a PR branch for
@@ -24,11 +25,6 @@ name: Bottle formula
 # private key in secrets.BOTTLE_APP_PRIVATE_KEY.
 on:
   pull_request:
-    paths:
-      - "Formula/**"
-  push:
-    branches:
-      - main
     paths:
       - "Formula/**"
   workflow_dispatch:
@@ -56,6 +52,14 @@ jobs:
       # script.
       BRANCH: ${{ github.head_ref || github.ref_name }}
     steps:
+      - name: Refuse a manual rebuild on the default branch
+        # The push would be rejected, but only after the build had replaced
+        # the release asset that main's formula pins by sha256.
+        if: github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch
+        run: |
+          echo "::error::A manual bottle rebuild has to target a PR branch, because the default branch only accepts pull requests."
+          exit 1
+
       - name: Mint a GitHub App token to push the bottle commit with
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0

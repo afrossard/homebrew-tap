@@ -19,3 +19,27 @@ jobs:
           sudo apt-get install -y bats
 
       - run: bats test/
+
+  # No path filter: a required check on a path-filtered job would stay pending
+  # forever on the PRs it skips.
+  stale-bottle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Homebrew
+        id: homebrew
+        uses: Homebrew/actions/setup-homebrew@63a2d4d8d4193eab3e62b1b782ff3ab8408f5b29 # 2026.11.09.1
+
+      - name: Fail if a formula's bottle does not match its version
+        env:
+          TAP_NAME: ${{ steps.homebrew.outputs.tap-name }}
+        run: |
+          set -euo pipefail
+          stale="$(.github/scripts/formulas-needing-bottle.sh)"
+          if [ -n "$stale" ]; then
+            echo "::error::Stale bottle, wait for the Bottle formula workflow to commit one: ${stale//$'\n'/ }"
+            exit 1
+          fi
