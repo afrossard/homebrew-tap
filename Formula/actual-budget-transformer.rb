@@ -1,13 +1,13 @@
 class ActualBudgetTransformer < Formula
   desc "Launcher for the bank statement import CLI (afrossard/actual-budget-transformer)"
   homepage "https://github.com/afrossard/actual-budget-transformer"
-  url "https://github.com/afrossard/actual-budget-transformer/archive/refs/tags/0.4.0.tar.gz"
-  sha256 "77e121de65e40378a5402570a9f79ae3fea934e8d52ae4a60c40fb2c6ca03156"
+  url "https://github.com/afrossard/actual-budget-transformer/archive/refs/tags/0.5.0.tar.gz"
+  sha256 "612d0f4a9e4ab1e2e0670556c7a022dd1f9711b5be8e8fdb420fbe4d247719ee"
   license "Unlicense"
 
   bottle do
-    root_url "https://github.com/afrossard/homebrew-tap/releases/download/actual-budget-transformer-0.4.0"
-    sha256 cellar: :any_skip_relocation, all: "404bfb4af82f697e9cd7039e9725598059077be17c4edfe4379b5626f9c8da17"
+    root_url "https://github.com/afrossard/homebrew-tap/releases/download/actual-budget-transformer-0.5.0"
+    sha256 cellar: :any_skip_relocation, all: "92b5c8ab7769bf19fc642a565791227dc2cd8b4e1b761bcae4951c289c439e36"
   end
 
   def install
