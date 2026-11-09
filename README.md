@@ -7,14 +7,14 @@ This repo carries no code of its own; each formula installs a release tarball fr
 
 - **agent-runtime**: the `launch-agent-runtime` launcher and `cleanup-agent-sessions` cleanup script from [afrossard/container-base](https://github.com/afrossard/container-base).
 
-```
+```sh
 brew install afrossard/tap/agent-runtime
 ```
 
 - **actual-budget-transformer**: the `abt-import` launcher from [afrossard/actual-budget-transformer](https://github.com/afrossard/actual-budget-transformer), which runs that release's import CLI image under [msb](https://github.com/superradcompany/microsandbox).
   msb is not a dependency, because it may already be installed by its own `curl` installer; the formula's caveats say how to get it.
 
-```
+```sh
 brew install afrossard/tap/actual-budget-transformer
 ```
 
@@ -46,7 +46,10 @@ The [`Bottle formula`](.github/workflows/bottle.yml) workflow closes that gap au
 The bottle commit is pushed as a GitHub App, so it runs the same checks as Renovate's commit without waiting for anyone to approve them.
 That push re-triggers the workflow, which finds the bottle current and builds nothing.
 
-If a PR is merged before its bottle commit lands, for example right after Renovate force-pushed the branch and dropped an earlier bottle commit, the same workflow runs on the push to `main` and commits the missing bottle there.
+The required `stale-bottle` check runs the same state check on every PR, so a PR cannot merge before its bottle commit lands.
+That covers the case where Renovate force-pushes its branch and drops an earlier bottle commit.
+The check is red on a fresh Renovate PR and turns green once the bottle commit is on the branch.
+The workflow never commits to `main`, which only accepts pull requests.
 
 The workflow rebuilds a formula only when the bottle committed next to it is stale, meaning its `bottle do` block's `root_url` no longer points at the release tag for the formula's current version.
 It checks every formula in the tree, deliberately asking what state each one is in rather than what a commit or a branch changed.
@@ -54,3 +57,5 @@ A diff against a base branch gives wrong answers once history moves under it, th
 Nothing downstream can catch a wrong answer there.
 Brew stamps the tap's own git HEAD into every keg it builds, so any rebuild from a later commit yields a different tarball every time; it can never settle by reproducing the bottle already committed.
 `workflow_dispatch` rebuilds a formula's bottle on demand, which is also how to force one when a source changed without the version changing.
+It has to target a PR branch, and the workflow refuses to run on `main`.
+A rebuild replaces the release asset straight away while `main` still pins the old `sha256`, so bottle installs fail until that PR merges.

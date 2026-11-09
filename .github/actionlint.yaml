@@ -1,0 +1,4 @@
+# Read by actionlint, which brew style runs in the tap-syntax check.
+config-variables:
+  - BOTTLE_APP_CLIENT_ID
+  - BOTTLE_APP_SLUG
