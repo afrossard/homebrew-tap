@@ -50,6 +50,11 @@ concurrency:
 jobs:
   bottle:
     runs-on: ubuntu-latest
+    env:
+      # The branch to build and push onto. Branch names are attacker-chosen, so
+      # the steps read this from the environment and never expand it into a
+      # script.
+      BRANCH: ${{ github.head_ref || github.ref_name }}
     steps:
       - name: Mint a GitHub App token to push the bottle commit with
         id: app-token
@@ -59,26 +64,16 @@ jobs:
           private-key: ${{ secrets.BOTTLE_APP_PRIVATE_KEY }}
           permission-contents: write
 
-      - name: Determine branch to build and push onto
-        id: branch
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "name=${{ github.event.pull_request.head.ref }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "name=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ steps.branch.outputs.name }}
+          ref: ${{ env.BRANCH }}
           fetch-depth: 0
 
       - name: Install Homebrew
         id: homebrew
-        # Homebrew is a rolling release with no stable-release concept, and
-        # Renovate cannot reliably pin/bump this action's CalVer tags (see
-        # PR history on this file) - float on main instead of chasing pins.
-        uses: Homebrew/actions/setup-homebrew@main
+        # Kept current by the custom manager in renovate.json, because the
+        # github-actions manager misreads this action's four-part tags.
+        uses: Homebrew/actions/setup-homebrew@63a2d4d8d4193eab3e62b1b782ff3ab8408f5b29 # 2026.11.09.1
 
       - name: Reset checkout to the real branch tip
         # setup-homebrew's own internal fetch/checkout (to trust this tap)
@@ -89,23 +84,24 @@ jobs:
         # which is also the formula the step below must judge.
         run: |
           set -euo pipefail
-          git fetch origin "${{ steps.branch.outputs.name }}"
-          git checkout -B "${{ steps.branch.outputs.name }}" "origin/${{ steps.branch.outputs.name }}"
+          git fetch origin "$BRANCH"
+          git checkout -B "$BRANCH" "origin/$BRANCH"
 
       - name: Determine which formulas need a bottle rebuild
         id: formulas
         env:
           TAP_NAME: ${{ steps.homebrew.outputs.tap-name }}
+          DISPATCHED_FORMULA: ${{ inputs.formula }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            formulas="Formula/${{ inputs.formula }}.rb"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            formulas="Formula/${DISPATCHED_FORMULA}.rb"
           else
             stale="$(.github/scripts/formulas-needing-bottle.sh)"
-            formulas="$(tr '\n' ' ' <<<"$stale")"
+            formulas="${stale//$'\n'/ }"
           fi
           echo "list=${formulas}" >> "$GITHUB_OUTPUT"
-          if [ -z "${formulas// /}" ]; then
+          if [ -z "$formulas" ]; then
             echo "Every formula already has a bottle for its current version - skipping bottle build."
           fi
 
@@ -113,31 +109,37 @@ jobs:
         if: steps.formulas.outputs.list != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
           TAP_NAME: ${{ steps.homebrew.outputs.tap-name }}
+          FORMULAS: ${{ steps.formulas.outputs.list }}
         run: |
           set -euo pipefail
-          for f in ${{ steps.formulas.outputs.list }}; do
+          read -ra formulas <<<"$FORMULAS"
+          for f in "${formulas[@]}"; do
             .github/scripts/build-and-publish-bottle.sh "$f"
           done
 
       - name: Commit updated formula(s) back onto the branch
         if: steps.formulas.outputs.list != ''
+        env:
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          FORMULAS: ${{ steps.formulas.outputs.list }}
         run: |
           set -euo pipefail
-          bot="${{ steps.app-token.outputs.app-slug }}[bot]"
-          bot_id="$(GH_TOKEN="${{ steps.app-token.outputs.token }}" gh api "/users/${bot}" --jq .id)"
+          read -ra formulas <<<"$FORMULAS"
+          bot="${APP_SLUG}[bot]"
+          bot_id="$(GH_TOKEN="$APP_TOKEN" gh api "/users/${bot}" --jq .id)"
           git config user.name "${bot}"
           git config user.email "${bot_id}+${bot}@users.noreply.github.com"
           # setup-homebrew's own fetch/checkout inside the tap (this same
           # checkout) drops the credential actions/checkout wired up, so
           # re-authenticate origin before pushing. Push as the App, not with
           # GITHUB_TOKEN, so the bottle commit gets CI without an approval hold.
-          git remote set-url origin "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository }}.git"
-          git add ${{ steps.formulas.outputs.list }}
+          git remote set-url origin "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git add "${formulas[@]}"
           if git diff --cached --quiet; then
             echo "Bottle unchanged - nothing to commit."
           else
-            git commit -m "chore: rebuild bottle for ${{ steps.formulas.outputs.list }}"
-            git push origin "HEAD:${{ steps.branch.outputs.name }}"
+            git commit -m "chore: rebuild bottle for ${FORMULAS}"
+            git push origin "HEAD:${BRANCH}"
           fi
