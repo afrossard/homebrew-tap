@@ -145,11 +145,20 @@ Immutable releases, required signed commits and required approvals are covered u
 | Renovate maintains the `setup-homebrew` pin | Opened a real PR updating both the hash and the four-part tag |
 | Repo setting `sha_pinning_required` | An unpinned action fails at job setup, and pinned `setup-homebrew` still runs |
 
+Confirmed on the real tap on 2026-11-09, under its live rulesets, by the Renovate bump in [#26](https://github.com/afrossard/homebrew-tap/pull/26):
+
+| Test | Result |
+|---|---|
+| `stale-bottle` on Renovate's version bump | Red until the bottle commit landed, then green |
+| Real `bottle.yml` | Published the release, and the asset's sha256 matches the formula |
+| GitHub App push to the PR branch | Accepted, triggered ordinary CI with no run held at `action_required`, and the next `bottle` run pushed nothing |
+| Renovate automerge | `app/renovate` squashed it once green, and the tree on `main` is identical to the PR head that passed |
+| `pr-title-lint` on a valid title | Green |
+
 Not tested:
 
-- The real `bottle.yml` and its GitHub App push under the rulesets.
 - Whether the 3 template injections zizmor reports in `bottle.yml` are reachable.
-- `pr-title-lint` on the tap.
+- `pr-title-lint` rejecting an invalid title on the tap, because it has only ever seen valid ones.
 - release-please in `container-base` after the move to squash, and release PRs under required checks in the two source repos.
 - Account 2FA and hardware keys, which the owner needs to confirm.
 
