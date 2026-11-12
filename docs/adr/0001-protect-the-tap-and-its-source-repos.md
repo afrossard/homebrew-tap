@@ -12,7 +12,7 @@ We deliberately keep zero required approvals and keep Renovate automerge for the
 
 - **Default branch ruleset, all three repos:** block deletion and non-fast-forward updates, require a pull request with 0 approvals and `allowed_merge_methods` of squash only, and require status checks, with `bypass_actors` empty.
 - **Tag ruleset, all three repos:** on all tags, block deletion and updates, with `bypass_actors` empty.
-- **Repo merge settings, all three repos:** only squash enabled, with the commit title from the PR title and the body from the PR body.
+- **Repo merge settings, all three repos:** only squash enabled, with the commit title from the PR title and an empty commit body.
 - **Stale bottles become a required check.**
   A job named `stale-bottle` in `test.yml` with no path filter fails when `formulas-needing-bottle.sh` prints anything, and `bottle.yml` stops committing to `main`.
 - **Required checks per repo:**
@@ -61,6 +61,9 @@ The custom manager is needed because Renovate's `github-actions` manager truncat
 - **GitHub App as a bypass actor:** rejected, because a stolen App key could write to `main`.
 - **A fix PR opened by the workflow for stale bottles:** rejected, because the App would need `pull_requests: write` and stale bottles could still reach users.
 - **Manual merges of formula bumps:** rejected, because a bottle diff is only a hash and a URL, so review adds little.
+- **Commit body from the PR body:** rejected on 2026-11-12 ([container-base#251](https://github.com/afrossard/container-base/issues/251)), after this ADR first chose it to match `actual-budget-transformer`.
+  release-please in `container-base` and `actual-budget-transformer` reads commit bodies, and a PR body can carry a `BREAKING CHANGE:` line, for example in the upstream release notes Renovate embeds, which would cut a major release.
+  The tap has no release-please and takes the same setting for consistency.
 - **Required signed commits:** rejected, because the rule adds nothing here.
   A squash of unsigned commits merged under the rule, and the resulting commit is signed by GitHub anyway.
 - **Immutable releases:** rejected, because they break the rebuild path.
