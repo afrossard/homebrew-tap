@@ -30,6 +30,12 @@
       ],
       "automerge": true,
       "platformAutomerge": false
+    },
+    {
+      "description": "Wait for container-base's publish-launcher job to upload the digest-pinned release asset, so the bump does not fall back to the unpinned source tarball.",
+      "matchManagers": ["homebrew"],
+      "matchPackageNames": ["afrossard/container-base"],
+      "minimumReleaseAge": "1 hour"
     }
   ]
 }
