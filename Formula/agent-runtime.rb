@@ -7,7 +7,7 @@ class AgentRuntime < Formula
 
   bottle do
     root_url "https://github.com/afrossard/homebrew-tap/releases/download/agent-runtime-5.1.1"
-    sha256 cellar: :any_skip_relocation, all: "9f99f7f3b262a9f17eb801c7e4050928ba409bd914a8a0700b314f76db463c9b"
+    sha256 cellar: :any_skip_relocation, all: "d54bd02165ac2057366511bac3e1734c2898e4bf0c526ec7decdb5279e86c1f5"
   end
 
   def install
