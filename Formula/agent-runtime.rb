@@ -1,13 +1,13 @@
 class AgentRuntime < Formula
   desc "Launcher and cleanup script for the agent runtime (afrossard/container-base)"
   homepage "https://github.com/afrossard/container-base"
-  url "https://github.com/afrossard/container-base/releases/download/5.1.1/container-base-5.1.1.tar.gz"
-  sha256 "167697e1768355b6a5467015517d62a650cddbd8dc6b38b492a7e7c7404d178d"
+  url "https://github.com/afrossard/container-base/releases/download/5.2.0/container-base-5.2.0.tar.gz"
+  sha256 "9ab9392e9f404c098247af7927db304f3ca5db7aae7cddc53353f21bcc312ed4"
   license "Unlicense"
 
   bottle do
-    root_url "https://github.com/afrossard/homebrew-tap/releases/download/agent-runtime-5.1.1"
-    sha256 cellar: :any_skip_relocation, all: "d54bd02165ac2057366511bac3e1734c2898e4bf0c526ec7decdb5279e86c1f5"
+    root_url "https://github.com/afrossard/homebrew-tap/releases/download/agent-runtime-5.2.0"
+    sha256 cellar: :any_skip_relocation, all: "896879be24b6b71efb5291586e6b5e7265987f6b5ac0a800c0c2c9e78280ecd6"
   end
 
   def install
