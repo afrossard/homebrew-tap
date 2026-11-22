@@ -188,10 +188,13 @@ A `pr-pull` direct push would therefore need an "always" bypass, which [ADR 0001
 
 ## Open questions and unverified points
 
-- Whether `--only-json-tab` (used by brewsci) makes macOS and Linux builds of our script-only formula byte-identical, which would let the stock merge produce `all:` bottles without our relabelling hack; chenrui333 gets `all:` bottles without it, but I did not test our formula.
+- **Answered on 2026-11-22:** `--only-json-tab` does make our formulas' bottles byte-identical across platforms.
+  In the scratch tap `afrossard/homebrew-scratch`, `brew test-bot --only-formulae --only-json-tab` built the same sha256 for each formula on macOS arm64 (`arm64_tahoe`), macOS Intel (`sequoia`), and Linux x86_64 and arm64, and `brew bottle --merge` wrote an `all:` tag by itself.
+  Without the flag, even the two Linux builds differed, as [`bottle.rb`][src-bottle-jsontab] predicts ("Without --only-json-tab bottles are never reproducible").
+  The receipt then lives only in the bottle's JSON, which `pr-upload` stores in the GHCR manifest's `sh.brew.tab` annotation ([`github_packages.rb`][src-ghp-tab]) and `brew install` reads back from it ([`resource.rb`][src-resource-tab]), so this needs GHCR rather than GitHub Releases.
 - Whether stock `pr-upload` works with **immutable releases** for a *rebuild*: a rebuild goes into the existing published `<name>-<version>` release, and Homebrew's commit message for [#24403][pr24403] says immutable releases reject "uploading assets to published releases".
   From the code, this looks like it would fail, but I did not test it.
-  ADR 0001 rejected immutable releases for the same reason.
+  ADR 0001 rejected immutable releases for the same reason, and the move to GHCR in ADR 0002 makes the question moot.
 - Whether the `GITHUB_TOKEN` pushes in mas-cli, qmk, frankenphp and gromgit trigger CI on `main` (GitHub suppresses workflow runs for `GITHUB_TOKEN` pushes), and whether those taps care.
 - brewsci's and osrf's classic branch protection settings, which need admin access to read.
 - Whether `softprops/action-gh-release` (aws/cbmc-viewer) overwrites a same-named asset.
@@ -217,6 +220,9 @@ A `pr-pull` direct push would therefore need an "always" bypass, which [ADR 0001
 [src-ghp-exists]: https://github.com/Homebrew/brew/blob/b63354cf393a1779a8e0d7ab6a52eed05c61171d/Library/Homebrew/github_packages.rb#L561-L569
 [src-bottle-rebuild]: https://github.com/Homebrew/brew/blob/b63354cf393a1779a8e0d7ab6a52eed05c61171d/Library/Homebrew/dev-cmd/bottle.rb#L643-L656
 [src-bottle-all]: https://github.com/Homebrew/brew/blob/b63354cf393a1779a8e0d7ab6a52eed05c61171d/Library/Homebrew/dev-cmd/bottle.rb
+[src-bottle-jsontab]: https://github.com/Homebrew/brew/blob/b63354cf393a1779a8e0d7ab6a52eed05c61171d/Library/Homebrew/dev-cmd/bottle.rb#L583
+[src-ghp-tab]: https://github.com/Homebrew/brew/blob/b63354cf393a1779a8e0d7ab6a52eed05c61171d/Library/Homebrew/github_packages.rb#L362
+[src-resource-tab]: https://github.com/Homebrew/brew/blob/b63354cf393a1779a8e0d7ab6a52eed05c61171d/Library/Homebrew/resource.rb#L469
 [c-843dffe]: https://github.com/Homebrew/brew/commit/843dffea78fb63aadd6a03f1b6763c5243525f9b
 [c-ac1b5e0]: https://github.com/Homebrew/brew/commit/ac1b5e0f13980339cb54ae2e227001fa3afb6ca7
 [c-15069d1]: https://github.com/Homebrew/brew/commit/15069d12a0
