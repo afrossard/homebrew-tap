@@ -43,7 +43,11 @@ The survey behind this is in [`docs/research/third-party-tap-bottles.md`](../res
 - The GHCR package has to be made public after its first push, or `brew install` cannot pull the bottle anonymously.
 - The publish job needs `packages: write` on top of the App token it uses to push.
 - `--clobber`, the release-tag naming and the replace-in-place rebuild path in `build-and-publish-bottle.sh` and the README go away.
-- Whether `brew test-bot` alone can produce our `all:` bottles, or our own build step stays, is still to be tested in a scratch repo.
+- `brew test-bot --only-formulae --only-json-tab` replaces our own build script and its `all:` relabelling.
+  On 2026-11-22, in the scratch tap `afrossard/homebrew-scratch`, both formulas built byte-identical bottles on macOS arm64 and Intel and on Linux x86_64 and arm64, and `brew bottle --merge` wrote an `all:` tag by itself.
+  Without `--only-json-tab`, even the two Linux builds differed, because the tarball then carries the install receipt; Homebrew's own source says "Without --only-json-tab bottles are never reproducible".
+- `--only-json-tab` ties us to GHCR.
+  The receipt then lives only in the bottle's JSON, `pr-upload` stores it in the GHCR manifest's `sh.brew.tab` annotation, and `brew install` reads it back from there, which a GitHub Release asset has no place for.
 
 ## Considered triggers for the publish job
 
