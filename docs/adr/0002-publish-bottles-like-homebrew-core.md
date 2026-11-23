@@ -26,6 +26,11 @@ The survey behind this is in [`docs/research/third-party-tap-bottles.md`](../res
   GHCR also sits outside ADR 0001's tag ruleset.
 - **Never overwrite a published bottle.**
   No `--clobber`, `--keep-old` or `--warn-on-upload-failure` on the publish path.
+- **Build on Linux x86_64 and Linux arm64 only.**
+  Our formulas only install shell scripts, so their bottles are byte-identical on every platform, and two Linux builds are enough for `brew bottle --merge` to write an `all:` bottle.
+- **A required `published-bottle` check replaces `stale-bottle`.**
+  It runs `brew fetch` on every formula and fails unless the formula has an `all:` bottle whose published file matches its `sha256`, so it checks what `brew install` actually gets.
+  A formula whose builds stop being identical has no `all:` bottle, so this check turns red instead of a platform-specific bottle reaching users.
 
 ## Considered options
 
@@ -36,18 +41,41 @@ The survey behind this is in [`docs/research/third-party-tap-bottles.md`](../res
 - **Keep publishing on every PR push, with a unique asset name per build:** rejected, because no surveyed tap does it, and it would be our own convention for a problem Homebrew's tooling already solves.
 - **Keep GitHub Releases as the host:** rejected, because it departs from the flow we are copying, and its `<name>-<version>` tags overlap with ADR 0001's tag ruleset.
   `pr-upload` would still refuse a duplicate asset on a published release.
+- **Building on macOS as well, like the stock `tests.yml`:** rejected, because unattended bumps would then wait on GitHub's macOS runners, and on 2026-11-23 a macOS arm64 job was cancelled after 15 minutes with "The job was not acquired by Runner of type hosted even after multiple attempts".
+  A macOS build adds nothing to an identical bottle; what it would add is `brew test` on macOS, which the old flow never ran either.
 
 ## Consequences
 
 - Each formula's `root_url` moves to `https://ghcr.io/v2/afrossard/tap`, and the current 5.2.0 and 0.5.0 bottles have to be republished there once.
-- The GHCR package has to be made public after its first push, or `brew install` cannot pull the bottle anonymously.
+- GitHub's docs say a new package starts private, but in the scratch tap both packages that the publish job created were public straight away, and `brew fetch` pulled them with no credentials.
+  If a new formula's package does start private, `published-bottle` stays red until it is made public in the package settings, which cannot be undone.
+- Users need Homebrew 7.0.14 (2026-11-16) or later.
+  `brew bottle --merge` writes `manifest_sha256` into every bottle block since [Homebrew/brew#24603](https://github.com/Homebrew/brew/pull/24603), and older versions cannot load the formula at all; a macOS runner on Homebrew 6.0.18 failed this way in the scratch tap.
 - The publish job needs `packages: write` on top of the App token it uses to push.
+- Auto-merge must be allowed in the tap's repo settings, which ADR 0001's merge settings did not include.
+- The publish job waits until GitHub reports the pushed bottle commit as the PR's head before turning on auto-merge, as homebrew-core does; without that wait the merge request failed with "expected head oid does not match the current head oid".
+- GitHub holds CI on the App's push for approval while the App counts as a first-time contributor to the repo.
+  The tap is past that, but the scratch tap needed it on every push, because a squash merge credits the PR author rather than the App.
+- A squash merge's body still gets a `Co-authored-by` trailer for the App, although ADR 0001 sets the body to blank.
 - `--clobber`, the release-tag naming and the replace-in-place rebuild path in `build-and-publish-bottle.sh` and the README go away.
 - `brew test-bot --only-formulae --only-json-tab` replaces our own build script and its `all:` relabelling.
   On 2026-11-22, in the scratch tap `afrossard/homebrew-scratch`, both formulas built byte-identical bottles on macOS arm64 and Intel and on Linux x86_64 and arm64, and `brew bottle --merge` wrote an `all:` tag by itself.
   Without `--only-json-tab`, even the two Linux builds differed, because the tarball then carries the install receipt; Homebrew's own source says "Without --only-json-tab bottles are never reproducible".
 - `--only-json-tab` ties us to GHCR.
   The receipt then lives only in the bottle's JSON, `pr-upload` stores it in the GHCR manifest's `sh.brew.tab` annotation, and `brew install` reads it back from there, which a GitHub Release asset has no place for.
+
+## Tested in the scratch tap
+
+On 2026-11-23, `afrossard/homebrew-scratch` ran this flow under a copy of the tap's `main` ruleset, with workflows that are the starting point for the tap's.
+
+| Test | Result |
+|---|---|
+| Publish by dispatch (scratch #3) | Bottles uploaded to GHCR, bottle commit pushed by the App, PR squash-merged by auto-merge once checks passed on that commit |
+| Automatic publish (scratch #5) | Published and merged with no one stepping in |
+| Two PRs bumping to the same version (scratch #4 and #5) | The second publish failed with `agent-runtime:5.2.0 already exists!`, and GHCR and `main` were unchanged |
+| `published-bottle` | Red before publishing, green after |
+| `brew install` on Linux x86_64 and arm64 and macOS arm64 | Poured the `all:` bottle, `poured_from_bottle=true` |
+| `brew install` on a macOS runner with Homebrew 6.0.18 | Could not load the formula, see the Homebrew 7.0.14 consequence above |
 
 ## Considered triggers for the publish job
 
