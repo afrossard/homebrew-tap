@@ -25,8 +25,7 @@ jobs:
   # No path filter: a required check on a path-filtered job would stay pending
   # forever on the PRs it skips.
   # Red on a formula PR until publish-bottles.yml has published its bottle and
-  # pushed the bottle commit, which is what stops it merging before then. Kept
-  # out of build-bottles.yml, whose success is what triggers the publish.
+  # pushed the bottle commit, which is what stops it merging before then.
   published-bottle:
     runs-on: ubuntu-latest
     steps:

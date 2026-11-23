@@ -37,7 +37,7 @@ Installing needs Homebrew 7.0.14 or later, because the bottle blocks carry `mani
 
 ### How bottles are published
 
-The flow copies homebrew-core's, with Homebrew's own `brew test-bot`, `brew pr-pull` and `brew pr-upload` ([ADR 0002](docs/adr/0002-publish-bottles-like-homebrew-core.md)):
+The flow copies homebrew-core's, with Homebrew's own `brew test-bot` and `brew pr-upload` ([ADR 0002](docs/adr/0002-publish-bottles-like-homebrew-core.md)):
 
 1. [`Build bottles`](.github/workflows/build-bottles.yml) builds every changed formula on each PR, on Linux x86_64 and arm64, and keeps the bottles as workflow artifacts.
    Nothing is published from a PR branch, so pushes, force-pushes and closed PRs never touch a published bottle.
@@ -45,16 +45,23 @@ The flow copies homebrew-core's, with Homebrew's own `brew test-bot`, `brew pr-p
    It merges the two builds into one `all:` bottle, uploads it to GHCR, pushes the bottle commit onto the PR branch as a GitHub App, and turns on squash auto-merge pinned to that commit.
 3. The PR merges once every required check has passed on the bottle commit.
 
-For Renovate's formula bumps, step 2 runs on its own as soon as the build succeeds, so bumps still land with no one stepping in.
-Any other PR that changes a formula is published by running `Publish bottles` by hand with the PR number and the head commit you reviewed; it refuses a PR whose head has moved since.
-Running it on a PR whose bottles are already published only merges it.
+For Renovate's PRs, `Build bottles` runs step 2 itself as soon as both builds pass, so formula bumps still land with no one stepping in.
+Renovate's PRs that change no formula build no bottles, so `Publish bottles` leaves them alone.
+
+Any other PR that changes a formula is published by running `Publish bottles` by hand with the PR number and the head commit you reviewed.
+It refuses a PR whose head has moved since.
+Running it on a PR that changes no formula, or whose head is already the bottle commit, only merges it.
 
 The required `published-bottle` check fetches every formula's bottle the way `brew install` does and fails unless the downloaded file matches the formula's `sha256`.
 It is red on a formula PR until its bottle is published, and on any PR if a published bottle ever stops matching.
 
 GHCR refuses to replace a bottle that already exists, so two PRs that bump a formula to the same version cannot overwrite each other's bottle ([issue #36](../../issues/36)): the second one's publish fails instead.
-A PR whose formula change leaves the published bottle matching publishes nothing and only merges.
-To rebuild a bottle without a version change, delete the formula's `bottle do` block on a PR; the new bottle gets the next `rebuild` number and so its own tag.
+Any change to a formula rebuilds its bottle; without a version change, the new bottle gets the next `rebuild` number and so its own tag.
+
+A publish also fails with "already exists" when a PR branch is force-pushed after its bottle was published but before it merged, for example by a Renovate rebase.
+The tag it collides with is never one `main` uses, because each publish takes the next version or `rebuild` number after `main`'s.
+When the colliding tag came from this same PR's earlier publish, delete that package version in the package's settings on GitHub, then run `Publish bottles` again.
+When it came from another open PR, that is the #36 race, and the PR that lost should be closed instead.
 
 A new formula's first publish creates its package on GHCR.
 Packages published this way have come out public, but if one does not, `published-bottle` stays red until it is made public in the package's settings.

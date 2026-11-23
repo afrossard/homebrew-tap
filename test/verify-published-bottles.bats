@@ -1,11 +1,10 @@
 #!/usr/bin/env bats
 #
-# This script backs the required `published-bottle` check and decides whether
-# the publish job has anything to upload. In issue #36, main pinned a bottle
-# sha256 whose release asset another PR had replaced, and nothing went red
-# until a user's `brew upgrade` failed. It must fail for every formula whose
-# published bottle is missing or differs, and for any formula without an
-# `all:` bottle.
+# This script backs the required `published-bottle` check. In issue #36, main
+# pinned a bottle sha256 whose release asset another PR had replaced, and
+# nothing went red until a user's `brew upgrade` failed. It must fail for every
+# formula whose published bottle is missing or differs, and for any formula
+# without an `all:` bottle.
 
 setup() {
   SCRIPT="${BATS_TEST_DIRNAME}/../.github/scripts/verify-published-bottles.sh"

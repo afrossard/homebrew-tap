@@ -8,6 +8,9 @@ A commit on `main` of this tap executes on users' machines through `brew install
 We protect all three repos with a default branch ruleset that has no bypass actors, a tag ruleset, squash-only merges and per-repo required checks.
 We deliberately keep zero required approvals and keep Renovate automerge for the two formula bumps, because this is a single-maintainer tap.
 
+[ADR 0002](0002-publish-bottles-like-homebrew-core.md) replaces the bottle parts of this decision: `bottle.yml`, the `stale-bottle` check and Renovate's own automerge of the formula bumps.
+Everything else here still holds.
+
 ## Decision
 
 - **Default branch ruleset, all three repos:** block deletion and non-fast-forward updates, require a pull request with 0 approvals and `allowed_merge_methods` of squash only, and require status checks, with `bypass_actors` empty.

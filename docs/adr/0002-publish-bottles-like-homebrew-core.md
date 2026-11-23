@@ -17,9 +17,17 @@ The survey behind this is in [`docs/research/third-party-tap-bottles.md`](../res
   One publish job uploads the PR's bottle artifact with Homebrew's `brew pr-upload`, pushes the bottle commit onto the PR branch with the GitHub App, and merges the PR with `gh pr merge --squash --match-head-commit`.
   This is the sequence in homebrew-core's `publish-commit-bottles.yml`, with squash instead of merge commits because ADR 0001 allows only squash.
 - **Renovate's formula bumps publish automatically, every other PR by hand.**
-  When the bottle build on a Renovate formula PR succeeds, the publish job runs on its own and merges the PR, so bumps still land with no one stepping in.
-  Renovate's own automerge is turned off for the two formula bumps, so only the publish job merges them.
-  Any other PR is published by dispatching the job with the PR number and the head commit that was reviewed, so a head that moved after review is never published.
+  When both bottle builds on a Renovate PR pass, the build workflow calls the publish workflow, which publishes and merges the PR, so bumps still land with no one stepping in.
+  A Renovate PR that changes no formula builds no bottles, and the publish workflow leaves it alone.
+  Renovate's own automerge is turned off for the two formula bumps, so only the publish workflow merges them.
+  Any other PR is published by dispatching the publish workflow with the PR number and the head commit that was reviewed, so a head that moved after review is never published.
+- **No privileged triggers and no scanner exceptions.**
+  The publish workflow is a reusable workflow, called from the build workflow's `pull_request` run or dispatched by hand, never started by `workflow_run` or `pull_request_target`.
+  It takes the bottles from the build run's artifacts with `actions/download-artifact` instead of `brew pr-pull`, which only fetches artifacts from another run.
+  The builds run on the runner itself rather than in Homebrew's unpinned `brew` container image, so zizmor at `min-severity: high` passes with no ignore comments.
+- **Decide what to do from the PR's current state.**
+  The publish workflow publishes when the build of the PR's head produced bottles, only merges when that head is already the App's bottle commit or a dispatched PR changes no formula, and otherwise does nothing.
+  It never skips a publish because an existing bottle still matches, so a formula change without a version change still gets a bottle built from it, with the next `rebuild` number.
 - **Host bottles on GHCR, not GitHub Releases.**
   `pr-upload` refuses an image tag that already exists, so a second publish of the same version fails instead of replacing the bottle `main` uses.
   A deliberate rebuild gets a new `rebuild` number and so a new tag.
@@ -51,11 +59,16 @@ The survey behind this is in [`docs/research/third-party-tap-bottles.md`](../res
   If a new formula's package does start private, `published-bottle` stays red until it is made public in the package settings, which cannot be undone.
 - Users need Homebrew 7.0.14 (2026-11-16) or later.
   `brew bottle --merge` writes `manifest_sha256` into every bottle block since [Homebrew/brew#24603](https://github.com/Homebrew/brew/pull/24603), and older versions cannot load the formula at all; a macOS runner on Homebrew 6.0.18 failed this way in the scratch tap.
-- The publish job needs `packages: write` on top of the App token it uses to push.
+- `GITHUB_TOKEN` gets write access in two jobs only: `packages: write` in the job that uploads, and `contents` and `pull-requests: write` in the job that turns on auto-merge.
+  This replaces ADR 0001's "`bottle.yml` is the only workflow here with `contents: write`"; the App still has Contents write and nothing more.
+- ADR 0001's `stale-bottle` required check becomes `published-bottle`, and `test-bot (ubuntu-latest)` and `test-bot (ubuntu-24.04-arm)` join the required checks.
+- A force-push to a PR after its bottle was published, such as a Renovate rebase, makes the next publish fail with "already exists", because the rebuilt bottle gets the same tag.
+  That tag is never one `main` uses, so deleting its package version and publishing again recovers; the README says how.
 - Auto-merge must be allowed in the tap's repo settings, which ADR 0001's merge settings did not include.
 - The publish job waits until GitHub reports the pushed bottle commit as the PR's head before turning on auto-merge, as homebrew-core does; without that wait the merge request failed with "expected head oid does not match the current head oid".
-- GitHub holds CI on the App's push for approval while the App counts as a first-time contributor to the repo.
-  The tap is past that, but the scratch tap needed it on every push, because a squash merge credits the PR author rather than the App.
+- `setup-homebrew` must not get a `token` input in the publish workflow.
+  It stores that token as a global git `extraheader`, so the bottle commit is then pushed as `GITHUB_TOKEN` whatever credentials the push URL carries.
+  In the scratch tap that made GitHub hold the bottle commit's CI for approval, which an earlier version of this ADR blamed on the App being a first-time contributor; with `contents: read`, the push was refused outright as `github-actions[bot]`.
 - A squash merge's body still gets a `Co-authored-by` trailer for the App, although ADR 0001 sets the body to blank.
 - `--clobber`, the release-tag naming and the replace-in-place rebuild path in `build-and-publish-bottle.sh` and the README go away.
 - `brew test-bot --only-formulae --only-json-tab` replaces our own build script and its `all:` relabelling.
@@ -76,8 +89,14 @@ On 2026-11-23, `afrossard/homebrew-scratch` ran this flow under a copy of the ta
 | `published-bottle` | Red before publishing, green after |
 | `brew install` on Linux x86_64 and arm64 and macOS arm64 | Poured the `all:` bottle, `poured_from_bottle=true` |
 | `brew install` on a macOS runner with Homebrew 6.0.18 | Could not load the formula, see the Homebrew 7.0.14 consequence above |
+| Reusable publish workflow, formula PR from the automatic actor (scratch #10) | Built on both Linux runners without a container, published `5.2.0-1`, the App's push got ordinary CI with nothing held, and the PR merged |
+| Same, but `setup-homebrew` given `token: github.token` (scratch #8) | Upload succeeded, then the push was refused as `github-actions[bot]` |
+| README-only PR from the automatic actor (scratch #9) | No bottles built, and the publish workflow left it unmerged |
+| Dispatching the publish workflow on that PR | `plan` chose merge only, and the PR merged |
 
 ## Considered triggers for the publish job
 
 - **Always manual, as in the stock `brew tap-new` workflow:** rejected, because every Renovate bump would then wait for the maintainer, against ADR 0001's automerged bumps.
+- **`workflow_run` on the build workflow:** rejected, because zizmor reports it as a high-severity dangerous trigger, and passing would need an ignore comment.
+  Calling the publish workflow from the build workflow's own `pull_request` run gives the same result, since a same-repo PR's run already has the secrets.
 - **A schedule that publishes every ready PR, like homebrew-core's `brew pr-automerge --publish`:** rejected, because it adds up to one interval of delay and more machinery than two formulas need.
