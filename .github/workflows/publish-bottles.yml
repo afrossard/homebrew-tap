@@ -1,0 +1,204 @@
+# Publishes a PR's bottles once, when the PR is ready to merge, following
+# homebrew-core's publish-commit-bottles.yml
+# (docs/adr/0002-publish-bottles-like-homebrew-core.md):
+# 1. download the bottles the PR's Build bottles run kept as artifacts,
+# 2. upload them to GHCR with `brew pr-upload`, which refuses a tag that
+#    already exists, so a bottle main depends on is never replaced,
+# 3. push the resulting bottle commit onto the PR branch as the GitHub App,
+# 4. turn on squash auto-merge pinned to that commit.
+#
+# Runs on its own when a Build bottles run for a PR pushed by
+# vars.AUTO_PUBLISH_ACTOR (Renovate) succeeds, and by dispatch with the PR
+# number and its reviewed head commit for any other PR. Dispatching a PR whose
+# bottles are already published only merges it.
+#
+# The bottle commit is pushed with a GitHub App installation token, not
+# GITHUB_TOKEN, so it gets ordinary CI instead of runs held for approval. That
+# CI's Build bottles run does not publish again: its actor is the App, and the
+# bottles are current anyway.
+# Setup: an App with Contents read/write installed on this repo, its client ID
+# in vars.BOTTLE_APP_CLIENT_ID and its private key in
+# secrets.BOTTLE_APP_PRIVATE_KEY; "Allow auto-merge" on in the repo settings.
+name: Publish bottles
+
+on:
+  # Same-repo PRs only, and only for vars.AUTO_PUBLISH_ACTOR: see the job's if.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: [Build bottles]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Pull request number
+        required: true
+      head_sha:
+        description: The pull request's reviewed head commit SHA
+        required: true
+
+permissions: {}
+
+# One publish per PR at a time. Not one for all PRs: GitHub keeps a single
+# pending run per group and cancels the rest, which would drop a publish, and
+# pr-upload already refuses a second upload of the same version.
+concurrency:
+  group: publish-bottles-${{ inputs.pull_request || github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+env:
+  ROOT_URL: https://ghcr.io/v2/afrossard/tap
+
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.actor.login == vars.AUTO_PUBLISH_ACTOR)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read # brew pr-pull downloads the PR's bottle artifacts
+      contents: write # gh pr merge
+      packages: write # brew pr-upload to GHCR
+      pull-requests: write # gh pr merge --auto
+    env:
+      PR: ${{ inputs.pull_request || github.event.workflow_run.pull_requests[0].number }}
+      EXPECTED_SHA: ${{ inputs.head_sha || github.event.workflow_run.head_sha }}
+    steps:
+      - name: Check the pull request is open, local and still at the expected commit
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state,baseRefName,headRefName,headRefOid,isCrossRepository)"
+          if [ "$(jq -r .state <<<"$pr")" != OPEN ] ||
+             [ "$(jq -r .baseRefName <<<"$pr")" != main ] ||
+             [ "$(jq -r .isCrossRepository <<<"$pr")" != false ]; then
+            echo "::error::PR #$PR must be open, target main, and come from a branch of this repository."
+            exit 1
+          fi
+          if [ "$(jq -r .headRefOid <<<"$pr")" != "$EXPECTED_SHA" ]; then
+            echo "::error::PR #$PR moved past $EXPECTED_SHA, so it is not the commit that was built and reviewed."
+            exit 1
+          fi
+          echo "branch=$(jq -r .headRefName <<<"$pr")" >> "$GITHUB_OUTPUT"
+
+      - name: Mint a GitHub App token to push the bottle commit with
+        id: app-token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.BOTTLE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BOTTLE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      # Taps this checkout in place; do not `brew tap` it again (AGENTS.md).
+      - name: Set up Homebrew
+        id: homebrew
+        uses: Homebrew/actions/setup-homebrew@ceec4e8419bb3c97ce96e9dda7738499ed5f869d # 2026.11.14.1
+        with:
+          token: ${{ github.token }}
+
+      - name: Check out the pull request's head commit
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        env:
+          BRANCH: ${{ steps.pr.outputs.branch }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+          git checkout -B "$BRANCH" "origin/$BRANCH"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Skip the upload if every bottle is already published
+        id: current
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        env:
+          TAP_NAME: ${{ steps.homebrew.outputs.tap-name }}
+        run: |
+          if .github/scripts/verify-published-bottles.sh "$TAP_NAME"; then
+            echo "::notice::Every formula's bottle is already published - only merging."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit as the GitHub App
+        if: steps.current.outputs.skip == 'false'
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        env:
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          bot="${APP_SLUG}[bot]"
+          bot_id="$(GH_TOKEN="$APP_TOKEN" gh api "/users/${bot}" --jq .id)"
+          git config user.name "$bot"
+          git config user.email "${bot_id}+${bot}@users.noreply.github.com"
+          {
+            echo "HOMEBREW_GIT_NAME=$bot"
+            echo "HOMEBREW_GIT_EMAIL=${bot_id}+${bot}@users.noreply.github.com"
+          } >> "$GITHUB_ENV"
+
+      - name: Download the pull request's bottles
+        id: pr-pull
+        if: steps.current.outputs.skip == 'false'
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
+        run: |
+          brew pr-pull \
+            --no-upload \
+            --clean \
+            --no-cherry-pick \
+            --workflows=build-bottles.yml \
+            --root-url="$ROOT_URL" \
+            --retain-bottle-dir \
+            --head-sha="$EXPECTED_SHA" \
+            --tap="$GITHUB_REPOSITORY" \
+            "$PR"
+
+      - name: Upload the bottles to GHCR and commit the bottle blocks
+        id: pr-upload
+        if: steps.current.outputs.skip == 'false'
+        working-directory: ${{ steps.pr-pull.outputs.bottle_path }}
+        env:
+          HOMEBREW_GITHUB_PACKAGES_USER: ${{ github.repository_owner }}
+          HOMEBREW_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
+          REPO_PATH: ${{ steps.homebrew.outputs.repository-path }}
+        run: |
+          brew pr-upload --root-url="$ROOT_URL"
+          echo "head_sha=$(git -C "$REPO_PATH" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Push the bottle commit onto the pull request branch
+        if: steps.current.outputs.skip == 'false'
+        working-directory: ${{ steps.homebrew.outputs.repository-path }}
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+        run: |
+          # A plain push, never forced: it fails if the branch moved meanwhile.
+          git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$BRANCH"
+
+      - name: Wait until GitHub sees the bottle commit as the pull request's head
+        if: steps.current.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW_SHA: ${{ steps.pr-upload.outputs.head_sha }}
+        run: |
+          # As in homebrew-core: merging is refused until the push has
+          # registered as the PR's head.
+          for delay in 1 2 4 8 16 32 64; do
+            if [ "$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)" = "$NEW_SHA" ]; then
+              exit 0
+            fi
+            sleep "$delay"
+          done
+          echo "::error::PR #$PR's head never became $NEW_SHA."
+          exit 1
+
+      - name: Squash-merge once checks pass on the head commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.pr-upload.outputs.head_sha || env.EXPECTED_SHA }}
+        run: gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --auto --squash --match-head-commit "$HEAD_SHA"

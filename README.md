@@ -24,7 +24,7 @@ No CI job or cross-repo credential is involved in that bump; it runs entirely as
 
 ## Bottle
 
-Every formula here ships a platform-independent (`all:`) bottle, hosted as a [GitHub Release](../../releases) asset on this repo.
+Every formula here ships a platform-independent (`all:`) bottle, hosted on the [GitHub Container Registry](https://github.com/afrossard?tab=packages&repo_name=homebrew-tap) like homebrew-core's.
 A formula's `install` block only copies scripts; none compiles anything.
 Without a bottle, though, Homebrew still refuses to install on Linux unless a `gcc`/`cc` binary is on `PATH`.
 Its `DevelopmentTools.installed?` check fires whenever no bottle can be poured, with no flag or DSL directive to bypass it (confirmed upstream as intentional in [Homebrew/brew#23252](https://github.com/Homebrew/brew/issues/23252)).
@@ -32,30 +32,28 @@ The bottle removes that compiler requirement entirely.
 `brew install` pours a prebuilt tarball instead of building from source, so it works on any machine regardless of what's on `PATH`.
 See [issue #3](../../issues/3) for the full investigation.
 
-### Rebuild automation
+Installing needs Homebrew 7.0.14 or later, because the bottle blocks carry `manifest_sha256`, which older versions cannot load.
+`brew install` updates Homebrew first unless auto-update is turned off.
 
-Renovate's version bump alone leaves the formula without a matching bottle, since Renovate only rewrites the source `url`/`sha256`.
-The [`Bottle formula`](.github/workflows/bottle.yml) workflow closes that gap automatically:
+### How bottles are published
 
-1. Renovate opens its usual same-repo PR bumping a formula's `url`/`sha256` to a new release of its source repo.
-2. That PR triggers the workflow, which sees the formula has no bottle for its new version, builds a fresh `all:` bottle with Homebrew's own `brew bottle` tooling, and publishes the tarball to a GitHub Release in this repo.
-3. The workflow commits the updated bottle block back onto the same PR branch, so the single Renovate PR carries both the version bump and its matching bottle.
-4. Renovate merges the PR itself once every check on its head, the bottle commit included, has passed ([`renovate.json`](renovate.json)). No separate bottle PR and no cross-repo credential is needed, since the PR branch already lives in this repo.
-   Renovate ignores the bottle commit when deciding whether someone else has edited its branch, so the commit doesn't stop it from rebasing or merging.
+The flow copies homebrew-core's, with Homebrew's own `brew test-bot`, `brew pr-pull` and `brew pr-upload` ([ADR 0002](docs/adr/0002-publish-bottles-like-homebrew-core.md)):
 
-The bottle commit is pushed as a GitHub App, so it runs the same checks as Renovate's commit without waiting for anyone to approve them.
-That push re-triggers the workflow, which finds the bottle current and builds nothing.
+1. [`Build bottles`](.github/workflows/build-bottles.yml) builds every changed formula on each PR, on Linux x86_64 and arm64, and keeps the bottles as workflow artifacts.
+   Nothing is published from a PR branch, so pushes, force-pushes and closed PRs never touch a published bottle.
+2. [`Publish bottles`](.github/workflows/publish-bottles.yml) uploads them once, when the PR is ready to merge.
+   It merges the two builds into one `all:` bottle, uploads it to GHCR, pushes the bottle commit onto the PR branch as a GitHub App, and turns on squash auto-merge pinned to that commit.
+3. The PR merges once every required check has passed on the bottle commit.
 
-The required `stale-bottle` check runs the same state check on every PR, so a PR cannot merge before its bottle commit lands.
-That covers the case where Renovate force-pushes its branch and drops an earlier bottle commit.
-The check is red on a fresh Renovate PR and turns green once the bottle commit is on the branch.
-The workflow never commits to `main`, which only accepts pull requests.
+For Renovate's formula bumps, step 2 runs on its own as soon as the build succeeds, so bumps still land with no one stepping in.
+Any other PR that changes a formula is published by running `Publish bottles` by hand with the PR number and the head commit you reviewed; it refuses a PR whose head has moved since.
+Running it on a PR whose bottles are already published only merges it.
 
-The workflow rebuilds a formula only when the bottle committed next to it is stale, meaning its `bottle do` block's `root_url` no longer points at the release tag for the formula's current version.
-It checks every formula in the tree, deliberately asking what state each one is in rather than what a commit or a branch changed.
-A diff against a base branch gives wrong answers once history moves under it, through force-pushes, a base that has advanced, or a merge that happens mid-run, while a state check reads the same however the tree was reached.
-Nothing downstream can catch a wrong answer there.
-Brew stamps the tap's own git HEAD into every keg it builds, so any rebuild from a later commit yields a different tarball every time; it can never settle by reproducing the bottle already committed.
-`workflow_dispatch` rebuilds a formula's bottle on demand, which is also how to force one when a source changed without the version changing.
-It has to target a PR branch, and the workflow refuses to run on `main`.
-A rebuild replaces the release asset straight away while `main` still pins the old `sha256`, so bottle installs fail until that PR merges.
+The required `published-bottle` check fetches every formula's bottle the way `brew install` does and fails unless the downloaded file matches the formula's `sha256`.
+It is red on a formula PR until its bottle is published, and on any PR if a published bottle ever stops matching.
+
+GHCR refuses to replace a bottle that already exists, so two PRs that bump a formula to the same version cannot overwrite each other's bottle ([issue #36](../../issues/36)): the second one's publish fails instead.
+To rebuild a bottle without a version change, change the formula on a PR as usual; the new bottle gets the next `rebuild` number and so its own tag.
+
+A new formula's first publish creates its package on GHCR.
+Packages published this way have come out public, but if one does not, `published-bottle` stays red until it is made public in the package's settings.
