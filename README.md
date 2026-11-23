@@ -53,7 +53,8 @@ The required `published-bottle` check fetches every formula's bottle the way `br
 It is red on a formula PR until its bottle is published, and on any PR if a published bottle ever stops matching.
 
 GHCR refuses to replace a bottle that already exists, so two PRs that bump a formula to the same version cannot overwrite each other's bottle ([issue #36](../../issues/36)): the second one's publish fails instead.
-To rebuild a bottle without a version change, change the formula on a PR as usual; the new bottle gets the next `rebuild` number and so its own tag.
+A PR whose formula change leaves the published bottle matching publishes nothing and only merges.
+To rebuild a bottle without a version change, delete the formula's `bottle do` block on a PR; the new bottle gets the next `rebuild` number and so its own tag.
 
 A new formula's first publish creates its package on GHCR.
 Packages published this way have come out public, but if one does not, `published-bottle` stays red until it is made public in the package's settings.
