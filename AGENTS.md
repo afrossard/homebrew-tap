@@ -4,12 +4,17 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 ## Bottle
 
-Every formula ships a bottle so `brew install` needs no compiler on the host.
-See `.github/workflows/bottle.yml`, `.github/scripts/*.sh`, and the README's "Bottle" section for what it is and how the rebuild automation works.
+Every formula ships an `all:` bottle on GHCR so `brew install` needs no compiler on the host.
+See the README's "Bottle" section and `docs/adr/0002-publish-bottles-like-homebrew-core.md` for how and why.
 
-- `brew bottle --merge --write` only auto-produces an `all:` tag when merging multiple per-platform JSON files with matching checksums (a multi-runner matrix). For a single-build `all:` bottle, build once, then relabel that one tag to `all` in the `--json` output (and its tarball filename) before merging.
-- Every keg brew builds records the tap's own git HEAD (`INSTALL_RECEIPT.json` `tap_git_head`), so no two builds from different tap commits ever produce the same bottle sha256. A rebuild therefore cannot converge on the bottle already committed, and no "did anything change?" guard after the build can stop a rebuild loop. Whether to rebuild has to be decided up front from the formula's current state (`.github/scripts/formulas-needing-bottle.sh`), never from what a commit or a branch changed - see `test/formulas-needing-bottle.bats`.
-- The workflow pushes its bottle commit with a GitHub App token, never `GITHUB_TOKEN`. A `GITHUB_TOKEN` push onto a PR branch creates `pull_request` runs that GitHub holds at `action_required` until someone with write access approves them. At merge, any run still held is closed as a zero-job `failure`, which leaves a red X in `main`'s history. The App token's push triggers ordinary CI instead, and the second Bottle run finds nothing stale. Setup is listed in the header comment of `bottle.yml`.
+- Never replace a published bottle.
+  No `--clobber`, `--keep-old` or `--warn-on-upload-failure` on the publish path.
+  `pr-upload` refusing an existing GHCR tag is what stops two PRs for the same version from breaking `main` (issue #36).
+- Every keg brew builds records the tap's own git HEAD, so a rebuild never reproduces the bottle already committed.
+  Decide whether to publish from the PR's current state, as the `plan` job in `publish-bottles.yml` does, never from whether a rebuild changed anything.
+- The bottle commit is pushed with a GitHub App token, never `GITHUB_TOKEN`.
+  GitHub holds `pull_request` runs for a `GITHUB_TOKEN` push onto a PR branch at `action_required`, and any still held at merge close as zero-job failures on `main`.
+  Never pass `setup-homebrew` a `token` input in a job that pushes: it stores the token as a global git `extraheader`, which overrides the App token in the push URL.
 
 ## CI checkout sharp edges
 

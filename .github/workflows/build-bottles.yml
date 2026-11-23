@@ -1,0 +1,75 @@
+# Builds every changed formula's bottle on each PR and keeps it as a workflow
+# artifact only; nothing is published from here unless the PR is Renovate's
+# (docs/adr/0002-publish-bottles-like-homebrew-core.md).
+#
+# Based on the tests.yml that `brew tap-new` generates, with these changes:
+# - Linux only, on the runner itself: these formulas only install scripts, so
+#   their bottles are identical on every platform, and two builds are enough
+#   for `brew bottle --merge` to write an `all:` bottle.
+# - --only-json-tab keeps the install receipt out of the tarball, which is
+#   what makes the builds identical.
+# - Renovate's PRs go straight on to publish-bottles.yml.
+#
+# No path filter: the test-bot jobs are required checks, and a required check
+# on a path-filtered job stays pending forever on the PRs it skips.
+name: Build bottles
+
+on:
+  pull_request:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+jobs:
+  test-bot:
+    name: test-bot (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@ceec4e8419bb3c97ce96e9dda7738499ed5f869d # 2026.11.14.1
+
+      - run: brew test-bot --only-cleanup-before
+
+      - run: brew test-bot --only-setup
+
+      - run: brew test-bot --only-formulae --only-json-tab --root-url=https://ghcr.io/v2/afrossard/tap
+
+      - name: Upload bottles as artifact
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bottles_${{ matrix.os }}
+          path: '*.bottle.*'
+
+  # Renovate's PRs publish and merge with no one stepping in; any other PR is
+  # published by dispatching publish-bottles.yml. The App's own bottle commit
+  # is pushed as the App, so its build does not publish again.
+  publish:
+    needs: test-bot
+    if: >-
+      github.actor == vars.AUTO_PUBLISH_ACTOR &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: read
+      contents: write
+      packages: write
+      pull-requests: write
+    uses: ./.github/workflows/publish-bottles.yml
+    with:
+      pull_request: ${{ github.event.pull_request.number }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
+      build_run_id: ${{ github.run_id }}
+    secrets:
+      BOTTLE_APP_PRIVATE_KEY: ${{ secrets.BOTTLE_APP_PRIVATE_KEY }}
